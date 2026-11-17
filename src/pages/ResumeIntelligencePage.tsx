@@ -40,8 +40,7 @@ export const ResumeIntelligencePage: React.FC = () => {
             .select(`
               *,
               resume_analyses(*),
-              detected_skills(*),
-              analysis_reports(*)
+              detected_skills(*)
             `)
             .eq('id', resumeId)
             .single();
@@ -53,26 +52,32 @@ export const ResumeIntelligencePage: React.FC = () => {
           }
 
           const analysis = rawRes.resume_analyses?.[0] || {};
-          const detectedSkillsList = (rawRes.detected_skills || []).map((s: any) => s.skill_name);
+          const allSkills = rawRes.detected_skills || [];
+          const detectedSkillsList = allSkills.filter((s: any) => !s.is_missing).map((s: any) => s.skill_name);
+          const missingSkillsList = allSkills.filter((s: any) => s.is_missing).map((s: any) => s.skill_name);
+          const breakdown = analysis.ats_breakdown_json || {};
+          const ats = rawRes.ats_compatibility ?? analysis.ats_score ?? 0;
 
+          // Real stored values only. Never show placeholder scores.
           const mapped: ResumeAnalysis = {
             id: rawRes.id,
             candidateName: rawRes.candidate_name || 'Candidate',
-            targetRole: rawRes.target_role || 'Target Role',
-            resumeScore: rawRes.resume_score || 85,
-            atsCompatibility: rawRes.ats_compatibility || 88,
-            skillsDetectedCount: detectedSkillsList.length || 15,
-            aiImprovementsCount: analysis.general_issues_json?.length || 4,
-            detectedSkills: detectedSkillsList.length > 0 ? detectedSkillsList : ['TypeScript', 'React', 'Node.js'],
-            missingSkills: analysis.missing_skills_json || ['System Architecture'],
-            aiRecommendation: analysis.ai_recommendation || 'Strengthen quantifiable achievement bullet points.',
+            targetRole: rawRes.target_role || 'Professional',
+            resumeScore: rawRes.resume_score ?? analysis.overall_score ?? 0,
+            atsCompatibility: ats,
+            skillsDetectedCount: rawRes.skills_detected_count ?? detectedSkillsList.length,
+            aiImprovementsCount: rawRes.ai_improvements_count ?? 0,
+            detectedSkills: detectedSkillsList,
+            missingSkills: missingSkillsList,
+            aiRecommendation: analysis.ai_recommendation || '',
             atsBreakdown: {
-              keywordMatch: analysis.keyword_density_score || 85,
-              formatting: analysis.formatting_score || 90,
-              experienceRelevance: analysis.structure_relevance_score || 88,
+              keywordMatch: breakdown.keywordMatch ?? ats,
+              formatting: breakdown.formatting ?? ats,
+              experienceRelevance: breakdown.experienceRelevance ?? ats,
             },
-            generalIssues: analysis.general_issues_json || [],
+            generalIssues: analysis.general_issues || [],
             rawText: rawRes.raw_text || '',
+            truncated: Boolean(rawRes.content_truncated),
           };
 
           setCandidate(mapped);
@@ -157,6 +162,11 @@ export const ResumeIntelligencePage: React.FC = () => {
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
               General candidate resume health, formatting compliance, keyword density, and extracted skill matrix audit.
             </p>
+            {candidate.truncated && (
+              <p className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
+                This resume was longer than the AI limit, so only the first part was analyzed.
+              </p>
+            )}
           </div>
 
           {/* Action Buttons */}

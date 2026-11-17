@@ -37,6 +37,27 @@ export interface ResumeAnalysis {
     skillGaps: string[];
   };
   rawText?: string;
+  /** Resume was longer than the AI limit; only the first part was analyzed. */
+  truncated?: boolean;
+  documentType?: string | null;
+  createdAt?: string;
+}
+
+export type CandidateStatus = 'new' | 'shortlisted' | 'on_hold' | 'rejected';
+
+export interface ScoreBreakdown {
+  skillCoverage: number | null;
+  experienceFit: number;
+  aiJudgment: number;
+  weights: { skillCoverage: number; experienceFit: number; aiJudgment: number };
+  matchedRequired?: string[];
+  missingRequired?: string[];
+  matchedNiceToHave?: string[];
+  missingNiceToHave?: string[];
+  strengths?: string[];
+  concerns?: string[];
+  candidateYearsExperience?: number | null;
+  minYearsExperience?: number | null;
 }
 
 export interface PricingPlan {
@@ -71,6 +92,13 @@ export interface JobMatchResult {
   experienceRelevance?: string; // e.g. "90%"
   formatCheck?: string; // e.g. "Passed"
   hiringRecommendation?: string;
+  candidateStatus?: CandidateStatus;
+  matchReason?: string | null;
+  skillCoveragePercentage?: number | null;
+  aiJudgmentPercentage?: number | null;
+  scoreBreakdown?: ScoreBreakdown | null;
+  scoringVersion?: string | null;
+  aiModel?: string | null;
 }
 
 export interface FaqItem {

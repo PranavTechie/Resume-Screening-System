@@ -24,8 +24,13 @@ function describeTransaction(tx: CreditTransaction): string {
   const text = (tx.description || '').trim();
   const rules: Array<[RegExp, string]> = [
     [/^Resume analysis:\s*(.+)$/i, 'Analyzed resume · $1'],
+    [/^Resume analysis$/i, 'Analyzed a resume'],
+    [/^Bulk resume analysis \((\d+) files?\)$/i, 'Bulk analysis · $1 files'],
+    [/^Candidate ranking \((\d+)\) for job:\s*(.+)$/i, 'Ranked $1 candidates · $2'],
     [/^Candidate ranking for job:\s*(.+)$/i, 'Ranked candidates · $1'],
-    [/^AI job description generation for\s*(.+)$/i, 'Generated job description · $1'],
+    [/^AI job description(?: generation for|:)\s*(.+)$/i, 'Generated job description · $1'],
+    [/^Retry (\d+) failed item\(s\)$/i, 'Retried $1 failed items'],
+    [/^Refund:\s*(.+)$/i, 'Refund · $1'],
     [/^Interview preparation:\s*(.+)$/i, 'Interview prep · $1'],
   ];
   for (const [pattern, label] of rules) {

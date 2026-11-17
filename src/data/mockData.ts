@@ -156,7 +156,7 @@ export const FAQS: FaqItem[] = [
   },
   {
     question: 'Is my resume data private?',
-    answer: 'Absolutely. Your resume data is encrypted end-to-end and strictly private to you. We never sell your personal information or share your resume with third-party recruiters without your explicit permission.'
+    answer: 'Yes. Your resumes are private to your account (HTTPS in transit, encrypted at rest by our storage provider, row-level access rules). We never sell your personal information or share your resume with other recruiters. You can delete it any time.'
   },
   {
     question: 'Can I analyze multiple resumes?',

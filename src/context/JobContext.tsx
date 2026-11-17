@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { JobItem, ResumeAnalysis, JobMatchResult } from '../types';
+import { JobItem, ResumeAnalysis, JobMatchResult, CandidateStatus } from '../types';
 import { supabase } from '../lib/supabase';
-import { apiClient } from '../lib/api';
+import { apiClient, Batch } from '../lib/api';
+import { friendlyError } from '../utils/errorMessages';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
 import {
@@ -19,12 +20,17 @@ interface JobContextType {
   deleteJob: (id: string) => Promise<void>;
   attachResumesToJob: (jobId: string, resumeIds: string[]) => Promise<void>;
   detachResumeFromJob: (jobId: string, resumeId: string) => Promise<void>;
-  rankResumesForJob: (jobId: string, signal?: AbortSignal) => Promise<void>;
+  /** Starts ranking on the background queue and returns the batch to watch. */
+  rankResumesForJob: (jobId: string) => Promise<Batch>;
   generateJobDescription: (title: string, company?: string, keywords?: string) => Promise<string | null>;
   uploadResume: (file: File, signal?: AbortSignal) => Promise<ResumeAnalysis | null>;
   addResume: (resume: ResumeAnalysis) => void;
   deleteResume: (resumeId: string) => Promise<void>;
-  refreshData: () => Promise<void>;
+  deleteResumes: (resumeIds: string[]) => Promise<number>;
+  detachResumesFromJob: (jobId: string, resumeIds: string[]) => Promise<void>;
+  updateCandidateStatus: (jobId: string, resumeIds: string[], status: CandidateStatus) => Promise<void>;
+  /** Re-fetch everything. `silent` keeps current data on screen (no loading state). */
+  refreshData: (opts?: { silent?: boolean }) => Promise<void>;
 }
 
 const JobContext = createContext<JobContextType | undefined>(undefined);
@@ -36,7 +42,7 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [resumes, setResumes] = useState<ResumeAnalysis[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
-  const fetchRealData = useCallback(async () => {
+  const fetchRealData = useCallback(async (opts?: { silent?: boolean }) => {
     if (authLoading) return;
 
     if (!user) {
@@ -46,7 +52,7 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    setLoading(true);
+    if (!opts?.silent) setLoading(true);
     try {
       // 1. Fetch Real User Resumes
       const { data: rawResumes, error: resumeErr } = await supabase
@@ -91,6 +97,9 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             formatting: analysis?.ats_breakdown_json?.formatting || atsComp,
             experienceRelevance: analysis?.ats_breakdown_json?.experienceRelevance || atsComp,
           },
+          truncated: Boolean(r.content_truncated),
+          documentType: r.document_type || null,
+          createdAt: r.created_at,
         };
       });
 
@@ -127,6 +136,13 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             matchSummary: m.match_summary || '',
             strongMatches: m.strong_matches_json || [],
             skillGaps: m.skill_gaps_json || [],
+            candidateStatus: (m.candidate_status as CandidateStatus) || 'new',
+            matchReason: m.match_reason || null,
+            skillCoveragePercentage: m.skill_coverage_percentage ?? null,
+            aiJudgmentPercentage: m.ai_judgment_percentage ?? null,
+            scoreBreakdown: m.score_breakdown_json || null,
+            scoringVersion: m.scoring_version || null,
+            aiModel: m.ai_model || null,
           };
         });
 
@@ -268,154 +284,51 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .eq('user_id', user.id);
   };
 
-  const detachResumeFromJob = async (jobId: string, resumeId: string) => {
-    if (!user) return;
-    const target = jobs.find(j => j.id === jobId);
-    if (!target) return;
-
-    const updatedAttached = target.attachedResumeIds.filter(id => id !== resumeId);
-
+  const detachResumesFromJob = async (jobId: string, resumeIds: string[]) => {
+    if (!user || resumeIds.length === 0) return;
+    const remove = new Set(resumeIds);
     setJobs(prev => prev.map(job => {
-      if (job.id === jobId) {
-        const updatedMatches = { ...job.matches };
-        delete updatedMatches[resumeId];
-        return { ...job, attachedResumeIds: updatedAttached, matches: updatedMatches, lastUpdated: 'Today' };
-      }
-      return job;
+      if (job.id !== jobId) return job;
+      const updatedMatches = { ...(job.matches || {}) };
+      resumeIds.forEach(id => delete updatedMatches[id]);
+      return { ...job, attachedResumeIds: job.attachedResumeIds.filter(id => !remove.has(id)), matches: updatedMatches };
     }));
-
-    await supabase
-      .from('jobs')
-      .update({ attached_resume_ids: updatedAttached, updated_at: new Date().toISOString() })
-      .eq('id', jobId)
-      .eq('user_id', user.id);
-
-    await supabase.from('job_matches').delete().eq('job_id', jobId).eq('resume_id', resumeId).eq('user_id', user.id);
+    try {
+      await apiClient.detachResumes(jobId, resumeIds);
+    } catch (err: any) {
+      toast.error(friendlyError(err, 'Could not remove candidates from the job.'));
+      await fetchRealData({ silent: true });
+    }
   };
 
-  const rankResumesForJob = async (jobId: string, signal?: AbortSignal) => {
+  const detachResumeFromJob = async (jobId: string, resumeId: string) => detachResumesFromJob(jobId, [resumeId]);
+
+  const rankResumesForJob = async (jobId: string): Promise<Batch> => {
     if (!user) {
       const err: any = new Error('Authentication required. Please sign in.');
       err.status = 401;
       throw err;
     }
-    const targetJob = jobs.find(j => j.id === jobId);
-    if (!targetJob || targetJob.attachedResumeIds.length === 0) {
-      const err: any = new Error('No candidate resumes attached to rank for this job.');
-      err.status = 400;
-      throw err;
-    }
+    const result = await apiClient.rankResumesForJob(jobId);
+    await refreshCredits();
+    return result.batch;
+  };
 
+  const updateCandidateStatus = async (jobId: string, resumeIds: string[], status: CandidateStatus) => {
+    if (!user || resumeIds.length === 0) return;
+    const ids = new Set(resumeIds);
+    setJobs(prev => prev.map(job => {
+      if (job.id !== jobId || !job.matches) return job;
+      const matches = { ...job.matches };
+      Object.keys(matches).forEach(id => { if (ids.has(id)) matches[id] = { ...matches[id], candidateStatus: status }; });
+      return { ...job, matches };
+    }));
     try {
-      const apiResult = await apiClient.rankResumesForJob(jobId, signal);
-      if (signal?.aborted) return;
-      if (apiResult) {
-        await refreshCredits();
-        if (apiResult.job && apiResult.job.matches) {
-          setJobs(prev => prev.map(j => j.id === jobId ? {
-            ...j,
-            isRanked: true,
-            status: 'Screened',
-            matches: apiResult.job.matches
-          } : j));
-        } else {
-          await fetchRealData();
-        }
-        return;
-      }
-    } catch (apiErr: any) {
-      if (apiErr?.name === 'AbortError' || apiErr?.code === 'CANCELLED' || signal?.aborted) {
-        return;
-      }
-      if (apiErr?.status || apiErr?.code || apiErr?.requiredCredits) {
-        // Re-throw authoritative API errors (402, 401, 403, 500)
-        throw apiErr;
-      }
-      console.warn('Backend REST API ranking unreachable, using direct Supabase persistence fallback:', apiErr?.message);
+      await apiClient.updateCandidateStatus(jobId, resumeIds, status);
+    } catch (err: any) {
+      toast.error(friendlyError(err, 'Could not update candidate status.'));
+      await fetchRealData({ silent: true });
     }
-
-    const matches: Record<string, JobMatchResult> = {};
-    const jobText = `${targetJob.title} ${targetJob.description}`.toLowerCase();
-
-    for (const resId of targetJob.attachedResumeIds) {
-      const res = resumes.find(r => r.id === resId);
-      if (!res) continue;
-
-      const candidateSkills = (res.detectedSkills || []).map(s => s.toLowerCase());
-      const candidateRawText = (res.rawText || '').toLowerCase();
-
-      // Check which skills from the candidate are present in the job
-      const strongMatches = (res.detectedSkills || []).filter(skill => {
-        const sLower = skill.toLowerCase();
-        return jobText.includes(sLower);
-      });
-
-      // Check common tech keywords in job that the candidate lacks
-      const COMMON_TECH = [
-        'React', 'TypeScript', 'JavaScript', 'Node.js', 'Python', 'Java', 'SQL',
-        'PostgreSQL', 'MongoDB', 'Redis', 'GraphQL', 'REST APIs', 'Docker', 'Kubernetes',
-        'AWS', 'CI/CD', 'Git', 'HTML', 'CSS', 'Tailwind', 'Next.js', 'Express'
-      ];
-      const jobRequiredTech = COMMON_TECH.filter(tech => jobText.includes(tech.toLowerCase()));
-      const skillGaps = jobRequiredTech.filter(tech => {
-        const tLower = tech.toLowerCase();
-        return !candidateSkills.includes(tLower) && !candidateRawText.includes(tLower);
-      });
-
-      let score = 0;
-      if (jobRequiredTech.length > 0) {
-        const matchedTechCount = jobRequiredTech.length - skillGaps.length;
-        score = Math.min(98, Math.max(0, Math.round((matchedTechCount / jobRequiredTech.length) * 100)));
-      } else if (strongMatches.length > 0) {
-        score = Math.min(95, strongMatches.length * 20);
-      } else {
-        score = res.targetRole.toLowerCase().includes(targetJob.title.toLowerCase()) ? 45 : 0;
-      }
-
-      const totalSkillsCount = strongMatches.length + skillGaps.length;
-      let matchSummary = '';
-      if (score > 60) {
-        matchSummary = `${res.candidateName} matched ${strongMatches.length} core requirements (e.g. ${strongMatches.slice(0, 2).join(', ')}) demonstrating strong alignment with the target role.`;
-      } else if (score > 0) {
-        matchSummary = `${res.candidateName} matched ${strongMatches.length} requirements but is missing critical skills (e.g. ${skillGaps.slice(0, 2).join(', ')}), demonstrating partial alignment.`;
-      } else {
-        matchSummary = `${res.candidateName} shows no direct technical alignment with the core requirements for ${targetJob.title}.`;
-      }
-
-      matches[resId] = {
-        resumeId: resId,
-        candidateName: res.candidateName,
-        candidateEmail: res.candidateEmail,
-        candidatePhone: res.candidatePhone,
-        targetRole: targetJob.title,
-        matchPercentage: score,
-        atsMatchPercentage: res.atsCompatibility || 80,
-        skillsMatchedCount: strongMatches.length,
-        experienceMatchPercentage: score,
-        matchSummary,
-        strongMatches: strongMatches.length > 0 ? strongMatches : [],
-        skillGaps: skillGaps.length > 0 ? skillGaps : (res.missingSkills.length > 0 ? res.missingSkills.slice(0, 3) : ['Domain Requirements']),
-      };
-
-      await supabase.from('job_matches').upsert({
-        job_id: jobId,
-        resume_id: resId,
-        user_id: user.id,
-        candidate_name: res.candidateName,
-        candidate_email: res.candidateEmail || null,
-        candidate_phone: res.candidatePhone || null,
-        match_percentage: score,
-        ats_match_percentage: res.atsCompatibility || 80,
-        skills_matched_count: strongMatches.length,
-        match_summary: matchSummary,
-        strong_matches_json: strongMatches,
-        skill_gaps_json: skillGaps,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'job_id,resume_id' });
-    }
-
-    await supabase.from('jobs').update({ status: 'Screened', is_ranked: true, updated_at: new Date().toISOString() }).eq('id', jobId).eq('user_id', user.id);
-    await fetchRealData();
   };
 
   const uploadResume = async (file: File, signal?: AbortSignal): Promise<ResumeAnalysis | null> => {
@@ -425,32 +338,24 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      // Execute REST API upload strictly to authoritative backend POST /api/resumes
       const apiResult = await apiClient.uploadResume(file, signal);
-
       if (!apiResult || !apiResult.resume) {
         if (signal?.aborted) return null;
-        throw new Error('Backend API did not return valid resume analysis payload.');
+        throw new Error('The server did not return an analysis.');
       }
-
       const uploadedResume: ResumeAnalysis = apiResult.resume;
-
-      // Update local state, refresh user credit balance & sync with persisted database state
-      setResumes(prev => [uploadedResume, ...prev]);
+      setResumes(prev => [uploadedResume, ...prev.filter(r => r.id !== uploadedResume.id)]);
       await refreshCredits();
-      await fetchRealData();
-
+      await fetchRealData({ silent: true });
       return uploadedResume;
     } catch (err: any) {
-      if (err?.name === 'AbortError' || err?.code === 'CANCELLED' || signal?.aborted) {
-        // Silent cancellation without throwing error toast
-        return null;
-      }
-      const errMsg = err?.message || 'Failed to analyze resume via backend API.';
-      console.error('Backend resume upload error:', errMsg);
-      const apiError: any = new Error(errMsg);
+      if (err?.name === 'AbortError' || err?.code === 'CANCELLED' || signal?.aborted) return null;
+      // Rejections are refunded server-side; keep the credit pill in sync.
+      await refreshCredits();
+      const apiError: any = new Error(friendlyError(err, 'Failed to analyze this resume.'));
       apiError.code = err?.code || 'PROCESS_FAILED';
       apiError.status = err?.status || 500;
+      apiError.details = err?.details;
       throw apiError;
     }
   };
@@ -459,31 +364,28 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setResumes(prev => [newResume, ...prev]);
   };
 
-  const deleteResume = async (resumeId: string) => {
-    if (!user) return;
-    setResumes(prev => prev.filter(r => r.id !== resumeId));
-    setJobs(prev => prev.map(job => ({
-      ...job,
-      attachedResumeIds: job.attachedResumeIds.filter(id => id !== resumeId),
-    })));
-
+  /** Deletes the user's own resumes (rows + stored files) through the API. Returns how many were deleted. */
+  const deleteResumes = async (resumeIds: string[]): Promise<number> => {
+    if (!user || resumeIds.length === 0) return 0;
+    const remove = new Set(resumeIds);
+    setResumes(prev => prev.filter(r => !remove.has(r.id)));
+    setJobs(prev => prev.map(job => {
+      const matches = { ...(job.matches || {}) };
+      resumeIds.forEach(id => delete matches[id]);
+      return { ...job, attachedResumeIds: job.attachedResumeIds.filter(id => !remove.has(id)), matches };
+    }));
     try {
-      const { data: row } = await supabase
-        .from('resumes')
-        .select('file_path')
-        .eq('id', resumeId)
-        .eq('user_id', user.id)
-        .single();
-
-      if (row?.file_path) {
-        await supabase.storage.from('resumes').remove([row.file_path]);
-      }
-
-      await supabase.from('resumes').delete().eq('id', resumeId).eq('user_id', user.id);
-      toast.info('Resume deleted successfully.');
-    } catch (err) {
-      console.error('Delete resume error:', err);
+      const res = await apiClient.deleteResumes(resumeIds);
+      return res.deleted;
+    } catch (err: any) {
+      toast.error(friendlyError(err, 'Could not delete resumes.'));
+      await fetchRealData({ silent: true });
+      return 0;
     }
+  };
+
+  const deleteResume = async (resumeId: string) => {
+    await deleteResumes([resumeId]);
   };
 
   const generateJobDescription = async (title: string, company?: string, keywords?: string): Promise<string | null> => {
@@ -525,6 +427,9 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         uploadResume,
         addResume,
         deleteResume,
+        deleteResumes,
+        detachResumesFromJob,
+        updateCandidateStatus,
         refreshData: fetchRealData,
       }}
     >

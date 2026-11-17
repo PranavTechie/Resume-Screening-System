@@ -44,7 +44,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({ onOpenAuth }) => {
     },
     {
       question: 'Will my resume data be secure?',
-      answer: 'Your data privacy is guaranteed. Resumes are processed over encrypted TLS 256-bit connections and stored securely. We never sell your resume or personal details to recruiters or third-party advertisers.'
+      answer: 'Resumes travel over HTTPS (TLS), are stored with our provider encryption at rest, and each account can only access its own files. We never sell your resume or personal details. You can export or delete your data any time in Settings.'
     }
   ];
 

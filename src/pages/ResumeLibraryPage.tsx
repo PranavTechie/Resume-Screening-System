@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Upload, Plus, Sparkles, HelpCircle, ArrowRight, CheckCircle2, Trash2, Eye, BarChart3, Briefcase, AlertCircle, X } from 'lucide-react';
+import { FileText, Sparkles, ArrowRight, CheckCircle2, Trash2, Eye, BarChart3, AlertCircle, X, Scissors } from 'lucide-react';
 import { ResumeAnalysis } from '../types';
 import { MatchWithJobModal } from '../components/MatchWithJobModal';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
@@ -8,13 +8,24 @@ import { useJobs } from '../context/JobContext';
 import { ResumeListSkeleton } from '../components/Skeletons';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../context/ToastContext';
-import { validateResumeFile, ALLOWED_ACCEPT_STRING, HELPER_TEXT } from '../utils/resumeParser';
+import { BULK_ACCEPT_STRING, HELPER_TEXT } from '../utils/resumeParser';
+import { isZip, preflightOne } from '../utils/uploadPreflight';
+import { BulkUploadModal } from '../components/BulkUploadModal';
+import { BatchProgressPanel } from '../components/BatchProgressPanel';
+import { useVisibleBatches } from '../hooks/useBatches';
 
 
 
 export const ResumeLibraryPage: React.FC = () => {
   const navigate = useNavigate();
-  const { resumes, uploadResume, deleteResume } = useJobs();
+  const { resumes, uploadResume, deleteResumes, refreshData } = useJobs();
+  const [bulkFiles, setBulkFiles] = useState<File[]>([]);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const batches = useVisibleBatches({ kind: 'analyze_resume' });
   const [matchModalOpen, setMatchModalOpen] = useState(false);
   const [selectedMatchCandidate, setSelectedMatchCandidate] = useState<ResumeAnalysis | null>(null);
   const [resumeToDelete, setResumeToDelete] = useState<ResumeAnalysis | null>(null);
@@ -54,10 +65,10 @@ export const ResumeLibraryPage: React.FC = () => {
     setUploadError(null);
     setLatestUploadedResume(null);
 
-    // Validate file
-    const validation = validateResumeFile(file);
-    if (!validation.valid) {
-      const errMsg = validation.error || 'Invalid file uploaded.';
+    // Local checks (type, size, PDF page count) before any credit is used
+    const validation = await preflightOne(file);
+    if (validation.status === 'error') {
+      const errMsg = validation.message || 'Invalid file uploaded.';
       setUploadError(errMsg);
       toast.error(errMsg, { title: 'Upload Failed' });
       return;
@@ -111,12 +122,55 @@ export const ResumeLibraryPage: React.FC = () => {
     }
   };
 
+  // One plain file keeps the instant single-analysis flow; several files or a ZIP go to the bulk queue.
+  const handleIncomingFiles = (list: File[]) => {
+    if (list.length === 0) return;
+    if (list.length === 1 && !isZip(list[0])) {
+      processResumeFile(list[0]);
+      return;
+    }
+    setBulkFiles(list);
+    setBulkOpen(true);
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    const file = files[0];
+    const files = Array.from(e.target.files || []) as File[];
     e.target.value = '';
-    processResumeFile(file);
+    handleIncomingFiles(files);
+  };
+
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (!isUploading) setDragActive(true);
+  };
+  const onDragLeave = (e: React.DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setDragActive(false);
+  };
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragActive(false);
+    if (isUploading) return;
+    handleIncomingFiles(Array.from(e.dataTransfer.files || []) as File[]);
+  };
+
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const allSelected = resumes.length > 0 && selectedIds.size === resumes.length;
+  const toggleSelectAll = () => setSelectedIds(allSelected ? new Set() : new Set(resumes.map((r) => r.id)));
+
+  const confirmBulkDelete = async () => {
+    setBulkDeleting(true);
+    const n = await deleteResumes(Array.from(selectedIds));
+    setBulkDeleting(false);
+    setBulkDeleteOpen(false);
+    setSelectedIds(new Set());
+    if (n > 0) toast.success(`${n} resume${n === 1 ? '' : 's'} deleted, including stored files.`, { title: 'Deleted' });
   };
 
   const handleCancelAnalysis = () => {
@@ -164,7 +218,7 @@ export const ResumeLibraryPage: React.FC = () => {
               My Resumes & CVs
             </h1>
             <p className="text-xs text-neutral-600 dark:text-neutral-400 mt-1 max-w-xl">
-              Upload, manage, and analyze your CV variations. Run AI audits or match with target job descriptions.
+              Upload one resume or up to 50 at once (or a ZIP). Each analysis uses 1 credit; rejected files and duplicates are free.
             </p>
           </div>
 
@@ -186,8 +240,32 @@ export const ResumeLibraryPage: React.FC = () => {
           </div>
         )}
 
+        {/* Batch progress (survives navigation / reload) */}
+        {batches.ids.length > 0 && (
+          <div className="space-y-3">
+            {batches.ids.map((id) => (
+              <BatchProgressPanel
+                key={id}
+                batchId={id}
+                onProgress={() => void refreshData({ silent: true })}
+                onFinished={(b) => {
+                  void refreshData({ silent: true });
+                  const done = b.counts.done || 0;
+                  toast.success(`${done} of ${b.total} resume${b.total === 1 ? '' : 's'} analyzed.`, { title: 'Batch finished' });
+                }}
+                onDismiss={() => batches.remove(id)}
+              />
+            ))}
+          </div>
+        )}
+
         {/* File Upload Drop Area (Redesigned Premium SaaS Style) */}
-        <div className="relative overflow-hidden bg-white/80 dark:bg-neutral-900/80 backdrop-blur-md border border-neutral-200/80 dark:border-neutral-800/80 rounded-[32px] p-8 sm:p-12 text-left group hover:border-neutral-300 dark:hover:border-neutral-700 transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer">
+        <div
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          className={`relative overflow-hidden bg-white/80 dark:bg-neutral-900/80 backdrop-blur-md border rounded-[32px] p-8 sm:p-12 text-left group transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer ${dragActive ? 'border-purple-400 ring-4 ring-purple-500/15 dark:border-purple-500' : 'border-neutral-200/80 dark:border-neutral-800/80 hover:border-neutral-300 dark:hover:border-neutral-700'}`}
+        >
           {/* Subtle animated background grid */}
           
           <div className="relative z-10 flex flex-col md:flex-row items-center gap-10 lg:gap-16 justify-between">
@@ -200,10 +278,10 @@ export const ResumeLibraryPage: React.FC = () => {
                   <span>Resume Analysis Engine</span>
                 </div>
                 <h3 className="text-2xl sm:text-3xl font-bold font-serif-title text-neutral-900 dark:text-white leading-tight">
-                  Upload your resume for AI evaluation
+                  Upload resumes for AI evaluation
                 </h3>
                 <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-3 leading-relaxed">
-                  Drag and drop your resume file here, or browse. Our AI engine will instantly extract your skills, verify ATS compatibility, and generate a neural score.
+                  Drag and drop one or many resumes here (or a ZIP), or browse. We check every file first, then extract skills, ATS readiness and a quality score.
                 </p>
               </div>
 
@@ -214,7 +292,7 @@ export const ResumeLibraryPage: React.FC = () => {
                 </button>
                 <div className="text-xs text-neutral-400 font-medium flex items-center gap-1.5">
                   <FileText className="w-3.5 h-3.5" />
-                  {HELPER_TEXT} up to 5MB
+                  {HELPER_TEXT}, ZIP · up to 5MB each, 50 per batch
                 </div>
               </div>
             </div>
@@ -232,11 +310,13 @@ export const ResumeLibraryPage: React.FC = () => {
 
           <input 
             type="file" 
-            accept={ALLOWED_ACCEPT_STRING} 
+            multiple
+            accept={BULK_ACCEPT_STRING} 
             className={`absolute inset-0 w-full h-full opacity-0 z-20 ${isUploading ? 'cursor-wait pointer-events-none' : 'cursor-pointer'}`} 
             onChange={handleFileUpload}
             disabled={isUploading}
-            title="Upload your resume"
+            title="Upload resumes"
+            aria-label="Upload resumes"
           />
 
           {/* Premium Animated Loading Line */}
@@ -262,8 +342,28 @@ export const ResumeLibraryPage: React.FC = () => {
             <h2 className="text-lg font-serif-title font-normal text-neutral-900 dark:text-white">
               Uploaded Resumes ({resumes.length})
             </h2>
-            <span className="text-xs text-neutral-500 font-medium">Sorted by last updated</span>
+            <div className="flex items-center gap-3">
+              {resumes.length > 0 && (
+                <label className="inline-flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-300 cursor-pointer select-none">
+                  <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="w-3.5 h-3.5 accent-purple-600" aria-label="Select all resumes" />
+                  Select all
+                </label>
+              )}
+              <span className="text-xs text-neutral-500 font-medium hidden sm:inline">Newest first</span>
+            </div>
           </div>
+
+          {selectedIds.size > 0 && (
+            <div className="sticky top-20 z-20 flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-neutral-900 text-white dark:bg-white dark:text-neutral-950 shadow-lg">
+              <span className="text-xs font-semibold">{selectedIds.size} selected</span>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setSelectedIds(new Set())} className="px-3 py-1.5 rounded-full text-xs font-semibold hover:bg-white/10 dark:hover:bg-black/5 cursor-pointer">Clear</button>
+                <button onClick={() => setBulkDeleteOpen(true)} className="px-3 py-1.5 rounded-full text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700 inline-flex items-center gap-1.5 cursor-pointer">
+                  <Trash2 className="w-3.5 h-3.5" /> Delete selected
+                </button>
+              </div>
+            </div>
+          )}
 
           {isLoading ? (
             <ResumeListSkeleton count={3} />
@@ -306,6 +406,13 @@ export const ResumeLibraryPage: React.FC = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(resume.id)}
+                        onChange={() => toggleSelect(resume.id)}
+                        className="w-4 h-4 accent-purple-600 cursor-pointer"
+                        aria-label={`Select ${resume.candidateName}`}
+                      />
                       <StatusBadge status={resume.status || 'Ready'} />
                       <button
                         onClick={() => handlePromptDeleteResume(resume)}
@@ -339,6 +446,12 @@ export const ResumeLibraryPage: React.FC = () => {
                       </div>
                     </div>
                   </div>
+
+                  {resume.truncated && (
+                    <div className="-mt-3 mb-4 flex items-center gap-1.5 text-[11px] text-neutral-500 dark:text-neutral-400" title="This resume was longer than the AI limit, so only the first part was analyzed.">
+                      <Scissors className="w-3 h-3" /> Long resume: first part analyzed
+                    </div>
+                  )}
 
                   {/* Skills */}
                   <div className="mb-6">
@@ -411,6 +524,28 @@ export const ResumeLibraryPage: React.FC = () => {
         />
       )}
 
+      <BulkUploadModal
+        isOpen={bulkOpen}
+        files={bulkFiles}
+        onClose={() => setBulkOpen(false)}
+        onStarted={(batch) => {
+          setBulkOpen(false);
+          batches.add(batch.id);
+          toast.success(`${batch.creditsReserved} file${batch.creditsReserved === 1 ? '' : 's'} queued for analysis.`, { title: 'Upload started' });
+        }}
+      />
+
+      <DeleteConfirmModal
+        isOpen={bulkDeleteOpen}
+        onClose={() => !bulkDeleting && setBulkDeleteOpen(false)}
+        onConfirm={confirmBulkDelete}
+        isDeleting={bulkDeleting}
+        title={`Delete ${selectedIds.size} resume${selectedIds.size === 1 ? '' : 's'}`}
+        itemType="resume"
+        description="This permanently deletes the selected resumes, their analyses, rankings and the stored files. Credits are not refunded for completed analyses."
+        confirmText="Delete selected"
+      />
+
       {/* Delete Confirmation Modal */}
       <DeleteConfirmModal
         isOpen={deleteModalOpen}
@@ -420,7 +555,7 @@ export const ResumeLibraryPage: React.FC = () => {
         }}
         onConfirm={() => {
           if (resumeToDelete) {
-            deleteResume(resumeToDelete.id);
+            void deleteResumes([resumeToDelete.id]);
             toast.success(`Resume "${resumeToDelete.candidateName}" deleted from library`, { title: 'Resume Deleted' });
           }
           setDeleteModalOpen(false);
@@ -429,7 +564,7 @@ export const ResumeLibraryPage: React.FC = () => {
         title="Delete Resume"
         itemName={resumeToDelete?.candidateName}
         itemType="resume"
-        description="Are you sure you want to delete this candidate resume? This will remove the resume and all associated AI feedback, ATS scores, and interview prep data."
+        description="This permanently deletes the resume, its AI analysis, any job rankings and the stored file."
         confirmText="Delete Resume"
       />
 

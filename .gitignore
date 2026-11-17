@@ -14,3 +14,11 @@ screenshots/
 
 # confidential: unfixed security findings, never publish
 SECURITY_AUDIT_REPORT.md
+
+# Monorepo-local only: the backend lives in its own GitHub repo; agent notes stay local
+backend/
+CLAUDE.md
+AGENTS.md
+.claude/
+scratch/
+bun.lock

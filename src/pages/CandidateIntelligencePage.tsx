@@ -42,13 +42,14 @@ export const CandidateIntelligencePage: React.FC = () => {
           resumeId: foundCandidate.id,
           candidateName: foundCandidate.candidateName,
           targetRole: foundJob.title,
-          matchPercentage: foundCandidate.resumeScore,
+          // Not ranked yet: never invent match numbers.
+          matchPercentage: 0,
           atsMatchPercentage: foundCandidate.atsCompatibility,
-          skillsMatchedCount: `${foundCandidate.detectedSkills.slice(0, 4).length}/${foundCandidate.detectedSkills.slice(0, 4).length + foundCandidate.missingSkills.slice(0, 2).length}`,
-          experienceMatchPercentage: foundCandidate.resumeScore,
-          matchSummary: `${foundCandidate.candidateName} evaluated against target job "${foundJob.title}". Solid technical alignment across core requirements.`,
-          strongMatches: foundCandidate.detectedSkills.slice(0, 4),
-          skillGaps: foundCandidate.missingSkills.length > 0 ? foundCandidate.missingSkills.slice(0, 2) : ['System Architecture'],
+          skillsMatchedCount: 0,
+          experienceMatchPercentage: undefined,
+          matchSummary: `Not ranked against "${foundJob.title}" yet. Run ranking from the job workspace.`,
+          strongMatches: [],
+          skillGaps: [],
         });
       }
 
@@ -87,28 +88,31 @@ export const CandidateIntelligencePage: React.FC = () => {
         };
 
         const analysis = rawRes.resume_analyses?.[0] || {};
-        const detectedSkillsList = (rawRes.detected_skills || []).map((s: any) => s.skill_name);
+        const allSkills = rawRes.detected_skills || [];
+        const detectedSkillsList = allSkills.filter((s: any) => !s.is_missing).map((s: any) => s.skill_name);
+        const missingSkillsList = allSkills.filter((s: any) => s.is_missing).map((s: any) => s.skill_name);
 
-        const atsComp = rawRes.ats_compatibility || 88;
+        const atsComp = rawRes.ats_compatibility ?? analysis.ats_score ?? 0;
 
         const mappedCandidate: ResumeAnalysis = {
           id: rawRes.id,
           candidateName: rawRes.candidate_name || 'Candidate',
           targetRole: rawRes.target_role || 'Target Role',
-          resumeScore: rawRes.resume_score || 85,
+          resumeScore: rawRes.resume_score ?? 0,
           atsCompatibility: atsComp,
-          skillsDetectedCount: detectedSkillsList.length || 15,
-          aiImprovementsCount: analysis.general_issues_json?.length || 4,
+          skillsDetectedCount: rawRes.skills_detected_count ?? detectedSkillsList.length,
+          aiImprovementsCount: rawRes.ai_improvements_count ?? 0,
           detectedSkills: detectedSkillsList,
-          missingSkills: analysis.missing_skills_json || [],
+          missingSkills: missingSkillsList,
           aiRecommendation: analysis.ai_recommendation || '',
           atsBreakdown: {
             keywordMatch: analysis.ats_breakdown_json?.keywordMatch || atsComp,
             formatting: analysis.ats_breakdown_json?.formatting || atsComp,
             experienceRelevance: analysis.ats_breakdown_json?.experienceRelevance || atsComp,
           },
-          generalIssues: [],
+          generalIssues: analysis.general_issues || [],
           rawText: '',
+          truncated: Boolean(rawRes.content_truncated),
         };
 
         // Check if matching job_match row exists
@@ -122,24 +126,31 @@ export const CandidateIntelligencePage: React.FC = () => {
             targetRole: mappedJob.title,
             matchPercentage: matchedRow.match_percentage,
             atsMatchPercentage: matchedRow.ats_match_percentage ?? matchedRow.match_percentage,
-            skillsMatchedCount: matchedRow.strong_matches_json?.length || 0,
-            experienceMatchPercentage: matchedRow.match_percentage,
+            skillsMatchedCount: matchedRow.skills_matched_count ?? matchedRow.strong_matches_json?.length ?? 0,
+            experienceMatchPercentage: matchedRow.experience_match_percentage ?? undefined,
             matchSummary: matchedRow.match_summary || '',
             strongMatches: matchedRow.strong_matches_json || [],
             skillGaps: matchedRow.skill_gaps_json || [],
+            candidateStatus: matchedRow.candidate_status || 'new',
+            matchReason: matchedRow.match_reason || null,
+            skillCoveragePercentage: matchedRow.skill_coverage_percentage ?? null,
+            aiJudgmentPercentage: matchedRow.ai_judgment_percentage ?? null,
+            scoreBreakdown: matchedRow.score_breakdown_json || null,
+            scoringVersion: matchedRow.scoring_version || null,
           };
         } else {
           matchRes = {
             resumeId: mappedCandidate.id,
             candidateName: mappedCandidate.candidateName,
             targetRole: mappedJob.title,
-            matchPercentage: mappedCandidate.resumeScore,
+            // Not ranked yet: show no invented match numbers.
+            matchPercentage: 0,
             atsMatchPercentage: mappedCandidate.atsCompatibility,
-            skillsMatchedCount: mappedCandidate.detectedSkills.slice(0, 4).length,
-            experienceMatchPercentage: mappedCandidate.resumeScore,
-            matchSummary: `${mappedCandidate.candidateName} evaluated against target job "${mappedJob.title}".`,
-            strongMatches: mappedCandidate.detectedSkills.slice(0, 4),
-            skillGaps: mappedCandidate.missingSkills.slice(0, 2),
+            skillsMatchedCount: 0,
+            experienceMatchPercentage: undefined,
+            matchSummary: `Not ranked against "${mappedJob.title}" yet. Run ranking from the job workspace.`,
+            strongMatches: [],
+            skillGaps: [],
           };
         }
 
@@ -311,6 +322,32 @@ export const CandidateIntelligencePage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {matchInfo.scoreBreakdown && (
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-5 shadow-xs space-y-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-sm font-bold text-neutral-900 dark:text-white">Why this score</h2>
+              {matchInfo.scoringVersion && <span className="text-[11px] text-neutral-500">Scoring {matchInfo.scoringVersion}</span>}
+            </div>
+            {matchInfo.matchReason && <p className="text-xs text-neutral-700 dark:text-neutral-300">{matchInfo.matchReason}</p>}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              {[
+                { label: 'Skill coverage (in code)', value: matchInfo.scoreBreakdown.skillCoverage, weight: matchInfo.scoreBreakdown.weights?.skillCoverage },
+                { label: 'Experience fit', value: matchInfo.scoreBreakdown.experienceFit, weight: matchInfo.scoreBreakdown.weights?.experienceFit },
+                { label: 'AI judgment', value: matchInfo.scoreBreakdown.aiJudgment, weight: matchInfo.scoreBreakdown.weights?.aiJudgment },
+              ].map((row) => (
+                <div key={row.label} className="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-950 border border-neutral-100 dark:border-neutral-800">
+                  <div className="flex justify-between text-neutral-500">
+                    <span>{row.label}</span>
+                    <span>{Math.round((row.weight ?? 0) * 100)}% weight</span>
+                  </div>
+                  <div className="text-xl font-bold text-neutral-900 dark:text-white mt-1">{row.value === null || row.value === undefined ? 'n/a' : `${row.value}%`}</div>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-neutral-500">AI scores are suggestions. Final hiring decisions should be made by a person.</p>
+          </div>
+        )}
 
         {/* Tab Navigation Bar */}
         <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl px-4 sm:px-6 shadow-xs overflow-x-auto flex items-center gap-6 text-xs font-semibold">

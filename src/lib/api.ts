@@ -24,6 +24,78 @@ export interface ApiError extends Error {
   code?: string;
   requiredCredits?: number;
   availableCredits?: number;
+  /** Extra fields the API attached to `error` (documentType, duplicateOfName, creditsRemaining...). */
+  details?: Record<string, any>;
+}
+
+export type BatchItemStatus = 'queued' | 'processing' | 'done' | 'failed' | 'rejected' | 'duplicate' | 'cancelled';
+
+export interface BatchItem {
+  id: string;
+  status: BatchItemStatus;
+  fileName: string | null;
+  resumeId: string | null;
+  candidateName: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  duplicateOfName: string | null;
+  resultRef: string | null;
+  attempts: number;
+  updatedAt: string;
+}
+
+export interface Batch {
+  id: string;
+  kind: 'analyze_resume' | 'rank_resume';
+  jobId: string | null;
+  total: number;
+  counts: Partial<Record<BatchItemStatus, number>>;
+  creditsReserved: number;
+  creditsRefunded: number;
+  status: 'active' | 'completed' | 'cancelled';
+  createdAt: string;
+  completedAt: string | null;
+  items?: BatchItem[];
+}
+
+function buildError(res: Response, json: any): ApiError {
+  const errCode = json?.error?.code || json?.code || `HTTP_${res.status}`;
+  const errMsg = json?.error?.message || json?.message || `Request failed with status ${res.status}`;
+  const error: ApiError = new Error(errMsg);
+  error.status = res.status;
+  error.code = errCode;
+  error.requiredCredits = json?.error?.requiredCredits;
+  error.availableCredits = json?.error?.availableCredits;
+  error.details = json?.error && typeof json.error === 'object' ? json.error : undefined;
+  return error;
+}
+
+function networkError(): ApiError {
+  const error: ApiError = new Error('Unable to reach the server. Please check your connection and try again.');
+  error.code = 'NETWORK_ERROR';
+  return error;
+}
+
+async function downloadAuthed(endpoint: string, fallbackName: string): Promise<void> {
+  const token = await getAuthToken();
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${endpoint}`, { headers: { Authorization: `Bearer ${token}` } });
+  } catch {
+    throw networkError();
+  }
+  if (!res.ok) throw buildError(res, await res.json().catch(() => null));
+  const blob = await res.blob();
+  const disposition = res.headers.get('Content-Disposition') || '';
+  const match = disposition.match(/filename="([^"]+)"/);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = match?.[1] || fallbackName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 async function getAuthToken(): Promise<string> {
@@ -60,14 +132,7 @@ async function requestApi<T>(endpoint: string, options?: RequestInit): Promise<T
   const json = await res.json().catch(() => null);
 
   if (!res.ok) {
-    const errCode = json?.error?.code || json?.code || `HTTP_${res.status}`;
-    const errMsg = json?.error?.message || json?.message || `Request failed with status ${res.status}`;
-    const error: ApiError = new Error(errMsg);
-    error.status = res.status;
-    error.code = errCode;
-    error.requiredCredits = json?.error?.requiredCredits;
-    error.availableCredits = json?.error?.availableCredits;
-    throw error;
+    throw buildError(res, json);
   }
 
   if (!json || json.success === false) {
@@ -127,7 +192,7 @@ export const apiClient = {
     const safetyTimeoutId = setTimeout(() => {
       isClientTimedOut = true;
       clientAbortController.abort();
-    }, 80000);
+    }, 150000);
 
     // Forward parent signal abort if provided
     if (signal) {
@@ -213,6 +278,7 @@ export const apiClient = {
       const error: ApiError = new Error(errMsg);
       error.status = res.status;
       error.code = errCode;
+      error.details = json?.error && typeof json.error === 'object' ? json.error : undefined;
       throw error;
     }
 
@@ -248,10 +314,76 @@ export const apiClient = {
     });
   },
 
-  async rankResumesForJob(jobId: string, signal?: AbortSignal) {
-    return requestApi<any>(`/api/jobs/${jobId}/rank`, {
-      method: 'POST',
-      signal,
+  /** Starts ranking on the background queue. Resolves with the batch to poll (HTTP 202). */
+  async rankResumesForJob(jobId: string) {
+    return requestApi<{ batch: Batch; creditsReserved: number }>(`/api/jobs/${jobId}/rank`, { method: 'POST' });
+  },
+
+  /** Bulk upload: up to 50 files OR one ZIP. Consent is required. */
+  async uploadBatch(input: { files?: File[]; zip?: File; consent: boolean }) {
+    const token = await getAuthToken();
+    const form = new FormData();
+    form.append('consent', input.consent ? 'true' : 'false');
+    if (input.zip) form.append('zip', input.zip);
+    for (const f of input.files || []) form.append('files', f);
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE_URL}/api/batches/upload`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+    } catch {
+      throw networkError();
+    }
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !json?.success) throw buildError(res, json);
+    return json.data as { batch: Batch; creditsReserved: number };
+  },
+
+  async getBatch(batchId: string) {
+    return requestApi<Batch>(`/api/batches/${batchId}`);
+  },
+
+  async listBatches(opts: { active?: boolean; jobId?: string } = {}) {
+    const q = new URLSearchParams();
+    if (opts.active) q.set('active', '1');
+    if (opts.jobId) q.set('jobId', opts.jobId);
+    const qs = q.toString();
+    return requestApi<Batch[]>(`/api/batches${qs ? `?${qs}` : ''}`);
+  },
+
+  async cancelBatch(batchId: string) {
+    return requestApi<Batch>(`/api/batches/${batchId}/cancel`, { method: 'POST' });
+  },
+
+  async retryFailedBatch(batchId: string) {
+    return requestApi<Batch>(`/api/batches/${batchId}/retry-failed`, { method: 'POST' });
+  },
+
+  async updateCandidateStatus(jobId: string, resumeIds: string[], status: string) {
+    return requestApi<{ updated: number }>(`/api/jobs/${jobId}/candidates/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ resumeIds, status }),
+    });
+  },
+
+  async detachResumes(jobId: string, resumeIds: string[]) {
+    return requestApi<any>(`/api/jobs/${jobId}/detach`, { method: 'POST', body: JSON.stringify({ resumeIds }) });
+  },
+
+  async deleteResumes(resumeIds: string[]) {
+    return requestApi<{ deleted: number }>('/api/resumes/bulk-delete', { method: 'POST', body: JSON.stringify({ resumeIds }) });
+  },
+
+  async exportRankingCsv(jobId: string, blind: boolean) {
+    return downloadAuthed(`/api/jobs/${jobId}/export.csv${blind ? '?blind=1' : ''}`, 'ranking.csv');
+  },
+
+  async exportMyData() {
+    return downloadAuthed('/api/data/export', 'my-data.json');
+  },
+
+  async deleteAllResumes() {
+    return requestApi<{ deleted: number; removedFiles: number }>('/api/data/resumes', {
+      method: 'DELETE',
+      body: JSON.stringify({ confirm: 'DELETE' }),
     });
   },
 

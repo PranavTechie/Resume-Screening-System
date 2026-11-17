@@ -22,10 +22,12 @@ import {
   Lock,
   AlertTriangle,
   Loader2,
-  Trash2
+  Trash2,
+  Database
 } from 'lucide-react';
+import { DataSettingsSection } from '../components/DataSettingsSection';
 
-type SectionId = 'account' | 'preferences' | 'billing' | 'security';
+type SectionId = 'account' | 'preferences' | 'billing' | 'security' | 'data';
 
 interface NavGroup {
   groupLabel: string;
@@ -54,6 +56,7 @@ const NAV_GROUPS: NavGroup[] = [
     groupLabel: 'SECURITY',
     items: [
       { id: 'security', label: 'Privacy & Security', icon: Shield },
+      { id: 'data', label: 'Your data', icon: Database },
     ],
   },
 ];
@@ -69,7 +72,7 @@ export const SettingsPage: React.FC = () => {
   // Read section from query params if available
   const queryParams = new URLSearchParams(location.search);
   const initialSectionParam = queryParams.get('section') as SectionId;
-  const initialSection = ['account', 'preferences', 'billing', 'security'].includes(initialSectionParam)
+  const initialSection = ['account', 'preferences', 'billing', 'security', 'data'].includes(initialSectionParam)
     ? initialSectionParam
     : 'account';
 
@@ -458,7 +461,7 @@ export const SettingsPage: React.FC = () => {
   // ==========================================
   useEffect(() => {
     const querySec = new URLSearchParams(location.search).get('section') as SectionId;
-    if (querySec && ['account', 'preferences', 'billing', 'security'].includes(querySec)) {
+    if (querySec && ['account', 'preferences', 'billing', 'security', 'data'].includes(querySec)) {
       setActiveSection(querySec);
     }
   }, [location.search]);
@@ -985,6 +988,8 @@ export const SettingsPage: React.FC = () => {
 
                   </div>
                 )}
+
+                {activeSection === 'data' && <DataSettingsSection />}
 
                 {/* 4. PRIVACY & SECURITY SECTION */}
                 {activeSection === 'security' && (

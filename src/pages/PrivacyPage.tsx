@@ -37,10 +37,10 @@ export const PrivacyPage: React.FC<PrivacyPageProps> = ({ onOpenAuth }) => {
 
           <div className="flex flex-wrap items-center justify-between text-xs text-neutral-500 dark:text-neutral-400 gap-2 pt-1">
             <p className="max-w-xl text-sm text-neutral-600 dark:text-neutral-400">
-              Your career data is sensitive. Learn how Resume Screening System protects, parses, and encrypts your personal information.
+              Resumes contain personal data. This page explains in plain language what we collect, how it is processed and how you control it.
             </p>
             <span className="font-mono text-xs px-2.5 py-1 rounded bg-neutral-200/60 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
-              Last Updated: August 10, 2026
+              Last Updated: November 17, 2026
             </span>
           </div>
         </div>
@@ -55,28 +55,28 @@ export const PrivacyPage: React.FC<PrivacyPageProps> = ({ onOpenAuth }) => {
             <div className="space-y-1">
               <div className="flex items-center gap-1.5 text-xs font-bold text-neutral-900 dark:text-white">
                 <ShieldCheck className="w-4 h-4 text-neutral-900 dark:text-white" />
-                <span>Zero Public Selling</span>
+                <span>We don't sell data</span>
               </div>
               <p className="text-xs text-neutral-600 dark:text-neutral-400">
-                We never sell or monetize your submitted resumes to recruiters or advertisers.
+                Resumes and candidate details are never sold or shared with advertisers or other recruiters.
               </p>
             </div>
             <div className="space-y-1">
               <div className="flex items-center gap-1.5 text-xs font-bold text-neutral-900 dark:text-white">
                 <Lock className="w-4 h-4 text-neutral-900 dark:text-white" />
-                <span>256-Bit Encryption</span>
+                <span>Encrypted & access-controlled</span>
               </div>
               <p className="text-xs text-neutral-600 dark:text-neutral-400">
-                All data transfers and server document storage use enterprise-grade encryption.
+                HTTPS/TLS in transit, provider encryption at rest, and row-level security so each account only sees its own data.
               </p>
             </div>
             <div className="space-y-1">
               <div className="flex items-center gap-1.5 text-xs font-bold text-neutral-900 dark:text-white">
                 <Eye className="w-4 h-4 text-neutral-900 dark:text-white" />
-                <span>Full User Control</span>
+                <span>You stay in control</span>
               </div>
               <p className="text-xs text-neutral-600 dark:text-neutral-400">
-                You can permanently purge your account data and uploaded resumes at any time.
+                Export your data or delete resumes, candidates or your whole account from Settings at any time.
               </p>
             </div>
           </div>
@@ -86,36 +86,37 @@ export const PrivacyPage: React.FC<PrivacyPageProps> = ({ onOpenAuth }) => {
             <h2 className="text-xl font-bold font-serif-title text-neutral-900 dark:text-white border-b border-neutral-100 dark:border-neutral-800 pb-2">
               1. Information We Collect
             </h2>
-            <p className="text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed">
-              We collect information to deliver precise career intelligence, ATS diagnostics, and personalized recommendations.
-            </p>
             <ul className="space-y-2 text-sm text-neutral-700 dark:text-neutral-300 pl-4 list-disc">
-              <li><strong>Resume & Career Materials:</strong> Full text, formatting attributes, experience histories, contact information, and skill entries extracted from uploaded documents.</li>
-              <li><strong>Account Credentials:</strong> Email address, name, authentication tokens, and billing preferences when creating an account.</li>
-              <li><strong>Target Job Data:</strong> Job descriptions, company names, and requirements submitted for matching comparisons.</li>
-              <li><strong>Usage Telemetry:</strong> Anonymized interaction metrics, browser type, and feature diagnostic logs.</li>
+              <li><strong>Resumes you upload:</strong> the file, the text we extract from it, contact details found in it (name, email, phone, profile links) and the analysis results.</li>
+              <li><strong>Account details:</strong> email address, name, sign-in data handled by our authentication provider, credit balance and plan.</li>
+              <li><strong>Jobs and rankings:</strong> job descriptions you add, match scores, candidate status and notes about why a candidate scored as they did.</li>
+              <li><strong>Upload consent:</strong> for bulk uploads, the time you confirmed you have permission to process the candidates' data.</li>
+              <li><strong>Basic server logs:</strong> time, request path, status and account id, kept for security and debugging. Resume text and candidate contact details are not written to logs.</li>
             </ul>
           </div>
 
           {/* Section 2 */}
           <div className="space-y-3">
             <h2 className="text-xl font-bold font-serif-title text-neutral-900 dark:text-white border-b border-neutral-100 dark:border-neutral-800 pb-2">
-              2. How We Use Your Data
+              2. How We Use and Process Data
             </h2>
-            <p className="text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed">
-              Your data is processed strictly for providing and improving the Resume Screening System experience:
-            </p>
             <div className="space-y-2 text-sm text-neutral-700 dark:text-neutral-300">
               <div className="p-3 rounded-lg bg-neutral-50 dark:bg-neutral-950 border border-neutral-100 dark:border-neutral-800">
-                <span className="font-bold text-neutral-900 dark:text-white block text-xs mb-0.5">Core Functionality</span>
+                <span className="font-bold text-neutral-900 dark:text-white block text-xs mb-0.5">Analysis and ranking</span>
                 <p className="text-xs text-neutral-600 dark:text-neutral-400">
-                  Executing ATS scanning models, calculating score breakdowns, and generating targeted interview prep questions.
+                  Resume text (and, for images or scanned PDFs, the file itself) is sent to Google's Gemini API to extract skills, score the resume and compare it with a job. AI scores are suggestions only; hiring decisions should be made by a person.
                 </p>
               </div>
               <div className="p-3 rounded-lg bg-neutral-50 dark:bg-neutral-950 border border-neutral-100 dark:border-neutral-800">
-                <span className="font-bold text-neutral-900 dark:text-white block text-xs mb-0.5">Service Personalization</span>
+                <span className="font-bold text-neutral-900 dark:text-white block text-xs mb-0.5">Storage</span>
                 <p className="text-xs text-neutral-600 dark:text-neutral-400">
-                  Saving audit history so you can monitor progress across multiple document iterations.
+                  Data and files are stored with Supabase (database and file storage). Each file lives in a private folder that only your account can access.
+                </p>
+              </div>
+              <div className="p-3 rounded-lg bg-neutral-50 dark:bg-neutral-950 border border-neutral-100 dark:border-neutral-800">
+                <span className="font-bold text-neutral-900 dark:text-white block text-xs mb-0.5">Recruiters uploading candidate resumes</span>
+                <p className="text-xs text-neutral-600 dark:text-neutral-400">
+                  If you upload other people's resumes, you are responsible for having their permission and a valid purpose. We process that data only on your instructions.
                 </p>
               </div>
             </div>
@@ -124,33 +125,56 @@ export const PrivacyPage: React.FC<PrivacyPageProps> = ({ onOpenAuth }) => {
           {/* Section 3 */}
           <div className="space-y-3">
             <h2 className="text-xl font-bold font-serif-title text-neutral-900 dark:text-white border-b border-neutral-100 dark:border-neutral-800 pb-2">
-              3. Data Retention & Deletion Rights
+              3. Security
             </h2>
+            <ul className="space-y-2 text-sm text-neutral-700 dark:text-neutral-300 pl-4 list-disc">
+              <li>All traffic between your browser, our API and our providers uses HTTPS (TLS).</li>
+              <li>Our database and file storage provider encrypts stored data at rest.</li>
+              <li>Row-level security rules mean an account can only read its own rows and files.</li>
+              <li>Credits are checked and charged on the server, never in the browser.</li>
+            </ul>
             <p className="text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed">
-              We retain personal data only for as long as necessary to fulfill the purposes outlined in this policy or as required by law.
-            </p>
-            <p className="text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed">
-              You maintain the absolute right to export or permanently delete your account, uploaded resumes, and diagnostic reports. Deletion requests execute across primary databases within 24 hours.
+              No system is perfectly secure. If we learn of a breach that affects your data, we will notify you and the authorities as the law requires.
             </p>
           </div>
 
           {/* Section 4 */}
           <div className="space-y-3">
             <h2 className="text-xl font-bold font-serif-title text-neutral-900 dark:text-white border-b border-neutral-100 dark:border-neutral-800 pb-2">
-              4. Cookies & Security Controls
+              4. Retention, Export and Deletion
             </h2>
             <p className="text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed">
-              We utilize essential session cookies required for authentication and state security. We do not deploy intrusive third-party tracking pixels for cross-site advertising.
+              We keep your data while your account is active. In <strong>Settings → Your data</strong> you can download everything as a JSON file or delete all resumes and candidates. Deleting a resume removes its database rows and its stored file straight away. Deleting your account removes your account data as well. Provider backups expire on their normal schedule.
+            </p>
+          </div>
+
+          {/* Section 4b */}
+          <div className="space-y-3">
+            <h2 className="text-xl font-bold font-serif-title text-neutral-900 dark:text-white border-b border-neutral-100 dark:border-neutral-800 pb-2">
+              5. Your Rights in India (DPDP Act, 2023)
+            </h2>
+            <p className="text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed">
+              Under India's Digital Personal Data Protection Act, you can ask what personal data we hold about you, ask us to correct or delete it, withdraw consent, and raise a complaint with us, and if it is not resolved, with the Data Protection Board of India. We use personal data only for the purpose it was given for. Candidates whose resumes were uploaded by a recruiter can contact that recruiter, or us, to exercise these rights.
+            </p>
+          </div>
+
+          {/* Section 4c */}
+          <div className="space-y-3">
+            <h2 className="text-xl font-bold font-serif-title text-neutral-900 dark:text-white border-b border-neutral-100 dark:border-neutral-800 pb-2">
+              6. Cookies
+            </h2>
+            <p className="text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed">
+              We use only what is needed to keep you signed in and remember your settings (for example theme). We do not use third-party advertising trackers.
             </p>
           </div>
 
           {/* Section 5 */}
           <div className="space-y-3">
             <h2 className="text-xl font-bold font-serif-title text-neutral-900 dark:text-white border-b border-neutral-100 dark:border-neutral-800 pb-2">
-              5. Privacy Questions & Complaints
+              7. Privacy Questions & Complaints
             </h2>
             <p className="text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed">
-              For privacy inquiries or to exercise your GDPR / CCPA data rights, please contact our Data Protection Officer:
+              For privacy questions or to exercise your rights, contact us:
             </p>
             <div className="p-4 rounded-xl bg-neutral-900 text-white border border-neutral-800 flex flex-wrap items-center justify-between gap-4">
               <div>
