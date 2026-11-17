@@ -1,0 +1,6 @@
+{
+  "name": "Resume Screening System",
+  "description": "AI-powered Resume Screening System",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

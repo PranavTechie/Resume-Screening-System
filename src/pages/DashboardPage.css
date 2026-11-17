@@ -1,0 +1,135 @@
+/* Dashboard: header, optional low-credit banner, then two columns of cards.
+   Colors come from the global tokens in index.css; green/amber/red only carry
+   score/status meaning, purple is the single accent. */
+.dash {
+  --dash-accent: #6d28d9;
+  --dash-accent-soft: #f3effd;
+  --dash-hover: var(--bg-page);
+  --dash-good: #15803d;
+  --dash-fair: #b45309;
+  --dash-low: #b91c1c;
+  color: var(--text-primary);
+  min-height: calc(100vh - 64px);
+  /* same horizontal padding as the navbar <header> so edges line up */
+  padding: 0 16px;
+}
+.dark .dash {
+  --dash-accent: #c4b5fd;
+  --dash-accent-soft: #1f1a33;
+  --dash-hover: rgba(255, 255, 255, 0.035);
+  --dash-good: #4ade80;
+  --dash-fair: #fbbf24;
+  --dash-low: #f87171;
+}
+@media (min-width: 640px) { .dash { padding: 0 24px; } }
+@media (min-width: 1024px) { .dash { padding: 0 32px; } }
+
+/* max-w-6xl = navbar width */
+.dash-inner { max-width: 72rem; margin: 0 auto; padding: 40px 0 72px; }
+
+/* Header */
+.dash-header { display: flex; align-items: center; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; margin-bottom: 32px; }
+.dash-header h1 { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: 34px; line-height: 1.15; letter-spacing: -0.01em; min-width: 0; overflow-wrap: anywhere; }
+.dash-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.dash-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; border-radius: 10px; font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; transition: background-color 150ms ease, border-color 150ms ease, opacity 150ms ease; }
+.dash-btn-primary { background: var(--text-primary); color: var(--bg-surface); border: 1px solid var(--text-primary); }
+.dash-btn-primary:hover { opacity: 0.88; }
+.dash-btn-secondary { background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-subtle); }
+.dash-btn-secondary:hover { border-color: var(--text-secondary); }
+.dash-btn:focus-visible, .dash-link:focus-visible { outline: 2px solid var(--dash-accent); outline-offset: 2px; }
+
+/* Low-credit banner: calm, not an alert */
+.dash-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap; margin-bottom: 24px; padding: 12px 12px 12px 20px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-left: 3px solid var(--dash-fair); border-radius: 12px; }
+.dash-banner p { font-size: 14px; color: var(--text-secondary); }
+.dash-banner strong { color: var(--text-primary); font-weight: 700; }
+
+/* Grid: one column, two from 1024px */
+.dash-grid { display: grid; gap: 24px; }
+@media (min-width: 1024px) {
+  .dash-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+}
+.dash-col { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+
+/* Cards */
+.dash-card { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; min-width: 0; }
+.dash-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; padding: 6px 12px 6px 20px; border-bottom: 1px solid var(--border-subtle); }
+.dash-card-head h2 { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.dash-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 8px; font-size: 13px; font-weight: 600; color: var(--dash-accent); text-decoration: none; border-radius: 6px; }
+.dash-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.dash-col-header { display: grid; gap: 16px; padding: 10px 20px 8px; border-bottom: 1px solid var(--border-subtle); font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+
+/* Rows */
+.dash-list { list-style: none; margin: 0; padding: 0; }
+.dash-list > li + li, .dash-loading > div + div { border-top: 1px solid var(--border-subtle); }
+
+.dash-row { display: grid; align-items: center; gap: 16px; min-height: 64px; padding: 12px 20px; color: inherit; text-decoration: none; transition: background-color 150ms ease; }
+a.dash-row:hover { background: var(--dash-hover); }
+a.dash-row:focus-visible { outline: 2px solid var(--dash-accent); outline-offset: -2px; }
+
+.dash-job-row { grid-template-columns: minmax(0, 1fr) auto 112px 16px; grid-template-areas: 'main status match chev'; }
+.dash-resume-row, .dash-cols-resume { grid-template-columns: minmax(0, 1fr) 72px 104px 16px; }
+.dash-resume-row { grid-template-areas: 'main score status chev'; }
+.dash-candidate-row, .dash-cols-candidate { grid-template-columns: minmax(0, 1fr) 52px 16px; }
+.dash-candidate-row { grid-template-areas: 'main score chev'; }
+.dash-activity-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'main amount'; }
+
+.dash-row-main { grid-area: main; min-width: 0; }
+.dash-row-main h3 { font-size: 14px; font-weight: 600; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-row-main p { margin-top: 2px; font-size: 13px; line-height: 1.35; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-chevron { grid-area: chev; color: var(--text-secondary); opacity: 0.6; transition: color 150ms ease, opacity 150ms ease; }
+a.dash-row:hover .dash-chevron { color: var(--dash-accent); opacity: 1; }
+.dash-muted { font-size: 13px; color: var(--text-secondary); }
+
+/* Job row */
+.dash-job-status { grid-area: status; justify-self: start; font-size: 12px; font-weight: 600; line-height: 1; padding: 6px 9px; border-radius: 999px; color: var(--text-secondary); background: var(--bg-page-alt); }
+.dash-job-status.is-active { color: var(--dash-accent); background: var(--dash-accent-soft); }
+.dash-match { grid-area: match; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.dash-match strong { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 4ch; text-align: right; }
+.dash-match-track { display: block; width: 52px; height: 4px; border-radius: 999px; background: var(--border-subtle); overflow: hidden; }
+.dash-match-track > span { display: block; width: 100%; height: 100%; border-radius: inherit; background: var(--dash-accent); transform-origin: left center; }
+
+/* Scores, status, amounts */
+.dash-score { grid-area: score; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.dash-score.good { color: var(--dash-good); }
+.dash-score.fair { color: var(--dash-fair); }
+.dash-score.low { color: var(--dash-low); }
+.dash-status { grid-area: status; display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text-secondary); }
+.dash-status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--dash-good); }
+.status-processing .dash-status-dot { background: var(--dash-fair); }
+.status-error .dash-status-dot { background: var(--dash-low); }
+.status-error { color: var(--dash-low); }
+.dash-amount { grid-area: amount; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.dash-amount.is-credit { color: var(--dash-good); }
+
+/* Empty + loading */
+.dash-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 20px; }
+.dash-empty p { font-size: 14px; color: var(--text-secondary); }
+.dash-skeleton-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; padding: 12px 20px; }
+.dash-skeleton-row > div { display: grid; gap: 8px; flex: 1; }
+.dash-skeleton-row span { display: block; height: 10px; border-radius: 999px; background: var(--border-subtle); animation: dash-pulse 1.4s ease-in-out infinite; }
+.dash-skeleton-row > div > span:first-child { width: 46%; }
+.dash-skeleton-row > div > span:last-child { width: 28%; }
+.dash-skeleton-row > span { width: 56px; }
+@keyframes dash-pulse { 50% { opacity: 0.45; } }
+
+/* Small screens: job and resume rows wrap onto two lines */
+@media (max-width: 639px) {
+  .dash-inner { padding: 28px 0 56px; }
+  .dash-header h1 { font-size: 28px; }
+  .dash-actions { width: 100%; }
+  .dash-actions .dash-btn { flex: 1; }
+  .dash-banner { padding-left: 16px; }
+  .dash-banner .dash-btn { width: 100%; }
+  .dash-card-head { padding-left: 16px; }
+  .dash-row { gap: 6px 12px; padding: 14px 16px; }
+  .dash-col-header { padding: 10px 16px 8px; gap: 12px; }
+  .dash-job-row { grid-template-columns: auto minmax(0, 1fr) 16px; grid-template-areas: 'main main chev' 'status match chev'; }
+  .dash-match { justify-content: flex-start; }
+  .dash-resume-row, .dash-cols-resume { grid-template-columns: 72px minmax(0, 1fr) 16px; }
+  .dash-resume-row { grid-template-areas: 'main main chev' 'score status chev'; }
+  /* rows wrap, so the header only labels the second line */
+  .dash-cols-resume > span:first-child { display: none; }
+  .dash-job-row .dash-row-main, .dash-resume-row .dash-row-main { margin-bottom: 4px; }
+}

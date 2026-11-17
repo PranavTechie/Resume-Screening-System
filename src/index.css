@@ -1,0 +1,184 @@
+@import "tailwindcss";
+
+/* Design tokens: tracking was too negative for the condensed serif (letters touched) */
+@theme {
+  --tracking-tight: -0.01em;
+  --tracking-tighter: -0.02em;
+}
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Semantic background colors usable as Tailwind classes (bg-canvas, border-line, ...) */
+@theme inline {
+  --color-canvas: var(--bg-page);
+  --color-canvas-alt: var(--bg-page-alt);
+  --color-surface: var(--bg-surface);
+  --color-line: var(--border-subtle);
+}
+
+@layer base {
+  /* ==========================================================
+     BACKGROUND TOKENS: tweak the whole site's backdrop here.
+     Flat tones only; depth comes from grain, hairlines, shadows.
+     ========================================================== */
+  :root {
+    --bg-page: #f7f6f2;        /* warm off-white page */
+    --bg-page-alt: #f0eee8;    /* alternating landing sections */
+    --bg-surface: #ffffff;     /* cards, panels, modals */
+    --border-subtle: #e4e1da;  /* warm hairline dividers */
+    --text-primary: #1a1917;
+    --text-secondary: #57534e;
+    --card-bg: var(--bg-surface);
+    /* muted text nudged so it passes WCAG AA (4.5:1) on page + alt tones */
+    --color-neutral-500: #696969;
+    --overlay: rgba(28, 25, 23, 0.42);   /* modal backdrop */
+    --hero-focal: rgba(255, 255, 255, 0.9); /* ~3% lighter than page: barely visible */
+    /* grain strength = the opacity='...' inside this SVG */
+    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  }
+
+  .dark {
+    --bg-page: #0b0c0e;        /* near-black, faint cool tint */
+    --bg-page-alt: #0f1013;
+    --bg-surface: #16171a;
+    --border-subtle: #24262b;
+    --text-primary: #f4f4f5;
+    --text-secondary: #a1a1aa;
+    --card-bg: var(--bg-surface);
+    --color-neutral-500: #858585;
+    --overlay: rgba(0, 0, 0, 0.62);
+    --hero-focal: rgba(255, 255, 255, 0.045);
+    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  }
+
+  html {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    scroll-behavior: smooth;
+    background-color: var(--bg-page);
+    color: var(--text-primary);
+  }
+
+  body {
+    background-color: var(--bg-page);
+    background-image: var(--grain);
+    color: var(--text-primary);
+    transition: background-color 250ms ease, color 250ms ease, border-color 250ms ease;
+  }
+
+  h1, h2 { text-wrap: balance; }
+
+  .font-serif-title {
+    font-family: 'Instrument Serif', Georgia, Cambria, "Times New Roman", Times, serif;
+    word-spacing: 0.06em;
+  }
+}
+
+/* Page backgrounds: flat tone + faint grain (replaces the old grid patterns) */
+@utility bg-page {
+  background-color: var(--bg-page);
+  background-image: var(--grain);
+}
+
+@utility bg-page-alt {
+  background-color: var(--bg-page-alt);
+  background-image: var(--grain);
+}
+
+@utility bg-overlay {
+  background-color: var(--overlay);
+}
+
+/* Single, static focal light behind the hero product card */
+@utility hero-focal {
+  background: radial-gradient(closest-side, var(--hero-focal), transparent);
+}
+
+/* Hairline border utilities */
+.border-hairline {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.dark .border-hairline {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Premium Editorial Link Underline Animation */
+.link-editorial {
+  position: relative;
+  display: inline-block;
+}
+
+.link-editorial::after {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 1px;
+  bottom: -1px;
+  left: 0;
+  background-color: currentColor;
+  transform: scaleX(0);
+  transform-origin: bottom right;
+  transition: transform 250ms ease-out;
+}
+
+.link-editorial:hover::after {
+  transform: scaleX(1);
+  transform-origin: bottom left;
+}
+
+/* Smooth custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(160, 160, 160, 0.3);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(124, 58, 237, 0.5);
+}
+
+/* Subtle button tactile feedback */
+button, a {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 180ms;
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+/* Laser scanning animation for AI Analysis Modal */
+@keyframes laserScan {
+  0% {
+    top: 0%;
+    opacity: 0.8;
+  }
+  50% {
+    top: 85%;
+    opacity: 1;
+  }
+  100% {
+    top: 0%;
+    opacity: 0.8;
+  }
+}
+
+.animate-laser-scan {
+  animation: laserScan 2.4s ease-in-out infinite;
+}
+
+/* Accessibility: Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

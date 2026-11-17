@@ -1,0 +1,16 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# local-only artifacts
+screenshots/
+.claude/settings.local.json
+*.bak
+
+# confidential: unfixed security findings, never publish
+SECURITY_AUDIT_REPORT.md
